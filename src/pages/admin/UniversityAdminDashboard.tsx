@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+
 import { Layout } from '@/components/layout/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,6 @@ import {
   Download,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminService } from '@/services/admin.api';
 import { useToast } from '@/components/ui/use-toast';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -60,13 +60,18 @@ export default function UniversityAdminDashboard() {
 
   useEffect(() => {
     const fetchUniversityData = async () => {
-      if (!user?.universityId) return;
-      
       try {
         setIsLoading(true);
-        // This API call targets only the admin's university scope
-        const response = await adminService.getUniversityMetrics(user.universityId);
-        setData(response);
+        const token = localStorage.getItem("token");
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/admin/university-stats`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        const json = await response.json();
+        if (!response.ok) throw new Error(json.message);
+        setData(json.data);
       } catch (error) {
         toast({
           title: "Sync Error",
@@ -79,7 +84,7 @@ export default function UniversityAdminDashboard() {
     };
 
     fetchUniversityData();
-  }, [user?.universityId, toast]);
+  }, []);
 
   // Client-side search filtering
   const filteredUsers = data.students.filter((student: any) =>

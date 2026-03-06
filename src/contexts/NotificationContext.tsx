@@ -66,7 +66,7 @@ const initialNotifications: Notification[] = [
 ];
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
-  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 

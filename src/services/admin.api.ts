@@ -25,7 +25,7 @@ export const adminService = {
    */
   getGlobalStats: async () => {
     try {
-      const response = await api.get(`/admin/university-stats`);
+      const response = await api.get(`/admin/global-stats`);
       // Returns { totalUsers, totalUniversities, totalRides, totalCo2Saved, totalFuelSaved }
       return response.data.data;
     } catch (error) {

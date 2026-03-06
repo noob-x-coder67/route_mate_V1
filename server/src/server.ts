@@ -17,9 +17,22 @@ const io = new Server(server, {
   },
 });
 
+
 // 4. Socket Event Listeners
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
+
+  // Join personal room using userId
+  socket.on("join", (userId: string) => {
+    socket.join(userId);
+    console.log(`User ${userId} joined their room`);
+  });
+
+  // Handle sending messages
+  socket.on("sendMessage", (data: { senderId: string, receiverId: string, content: string, message: any }) => {
+    io.to(data.receiverId).emit("newMessage", data.message);
+    io.to(data.receiverId).emit("newNotification", { type: 'message', from: data.senderId });
+  });
 
   socket.on("disconnect", () => {
     console.log(`User disconnected: ${socket.id}`);

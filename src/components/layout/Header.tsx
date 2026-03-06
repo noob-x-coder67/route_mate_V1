@@ -1,67 +1,118 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { roleService } from '@/services/roleService';
-import { Button } from '@/components/ui/button';
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { roleService } from "@/services/roleService";
+import { Button } from "@/components/ui/button";
+import { useEffect, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Leaf, Menu, X, MessageSquare, User, LogOut, Settings, Shield, Building2, Crown } from 'lucide-react';
-import { AuthModal } from '@/components/auth/AuthModal';
-import { NotificationCenter } from '@/components/notifications/NotificationCenter';
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Leaf,
+  Menu,
+  X,
+  MessageSquare,
+  User,
+  LogOut,
+  Settings,
+  Shield,
+  Building2,
+  Crown,
+} from "lucide-react";
+import { AuthModal } from "@/components/auth/AuthModal";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 
 export function Header() {
-  const { user, isAuthenticated, logout, isSuperAdmin, isUniversityAdmin } = useAuth();
+  const { user, isAuthenticated, logout, isSuperAdmin, isUniversityAdmin } =
+    useAuth();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authModalTab, setAuthModalTab] = useState<'signin' | 'signup'>('signin');
+  const [authModalTab, setAuthModalTab] = useState<"signin" | "signup">(
+    "signin",
+  );
+
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const API_URL =
+          import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+        const res = await fetch(`${API_URL}/messages/conversations`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        const total = (data.data.conversations || []).reduce(
+          (sum: number, c: any) => sum + (c.unreadCount || 0),
+          0,
+        );
+        setMessageUnreadCount(total);
+      } catch (err) {}
+    };
+
+    // Listen for count updates from Messages page
+    const handleCountUpdate = (e: Event) => {
+      setMessageUnreadCount((e as CustomEvent).detail);
+    };
+
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    window.addEventListener("unreadCountUpdate", handleCountUpdate);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("unreadCountUpdate", handleCountUpdate);
+    };
+  }, [isAuthenticated]);
 
   // Check if user has any admin access
   const hasAdminAccess = isSuperAdmin || isUniversityAdmin;
 
   const getInitials = (name: string) => {
     return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
       .toUpperCase()
       .slice(0, 2);
   };
 
   const handleSignIn = () => {
-    setAuthModalTab('signin');
+    setAuthModalTab("signin");
     setAuthModalOpen(true);
   };
 
   const handleSignUp = () => {
-    setAuthModalTab('signup');
+    setAuthModalTab("signup");
     setAuthModalOpen(true);
   };
 
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate("/");
   };
 
   const navLinks = isAuthenticated
     ? [
-        { label: 'Home', href: '/home' },
-        { label: 'Find Carpool', href: '/find-carpool' },
-        { label: 'Offer Ride', href: '/offer-ride' },
-        { label: 'Messages', href: '/messages' },
+        { label: "Home", href: "/home" },
+        { label: "Find Carpool", href: "/find-carpool" },
+        { label: "Offer Ride", href: "/offer-ride" },
+        { label: "Messages", href: "/messages" },
       ]
     : [
-        { label: 'Features', href: '/#features' },
-        { label: 'How It Works', href: '/#how-it-works' },
-        { label: 'Sustainability', href: '/#sustainability' },
-        { label: 'About', href: '/about' },
+        { label: "Features", href: "/#features" },
+        { label: "How It Works", href: "/#how-it-works" },
+        { label: "Sustainability", href: "/#sustainability" },
+        { label: "About", href: "/about" },
       ];
 
   return (
@@ -72,7 +123,7 @@ export function Header() {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
             <Leaf className="h-5 w-5 text-primary-foreground" />
           </div>
-           {/* Brand name + slogan – stacked vertically */}
+          {/* Brand name + slogan – stacked vertically */}
           <div className="flex flex-col items-start leading-tight">
             <span className="text-xl font-bold text-foreground">RouteMate</span>
             <span className="text-xs italic font-medium text-muted-foreground">
@@ -83,7 +134,7 @@ export function Header() {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6">
-          {navLinks.map(link => (
+          {navLinks.map((link) => (
             <Link
               key={link.href}
               to={link.href}
@@ -105,22 +156,29 @@ export function Header() {
               <Link to="/messages">
                 <Button variant="ghost" size="icon" className="relative">
                   <MessageSquare className="h-5 w-5" />
-                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
-                    1
-                  </span>
+                  {messageUnreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
+                      {messageUnreadCount}
+                    </span>
+                  )}
                 </Button>
               </Link>
 
               {/* User Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2 pl-2">
+                  <Button
+                    variant="ghost"
+                    className="flex items-center gap-2 pl-2"
+                  >
                     <Avatar className="h-8 w-8">
                       <AvatarFallback className="bg-primary text-primary-foreground text-sm">
                         {getInitials(user.name)}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="text-sm font-medium">{user.name.split(' ')[0]}</span>
+                    <span className="text-sm font-medium">
+                      {user.name.split(" ")[0]}
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56 bg-popover">
@@ -128,19 +186,27 @@ export function Header() {
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium">{user.name}</p>
                       {isSuperAdmin && (
-                        <Badge variant="default" className="text-[10px] px-1 py-0">
+                        <Badge
+                          variant="default"
+                          className="text-[10px] px-1 py-0"
+                        >
                           <Crown className="h-2.5 w-2.5 mr-0.5" />
                           Super
                         </Badge>
                       )}
                       {isUniversityAdmin && !isSuperAdmin && (
-                        <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] px-1 py-0"
+                        >
                           <Building2 className="h-2.5 w-2.5 mr-0.5" />
                           Admin
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {user.email}
+                    </p>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -170,13 +236,18 @@ export function Header() {
                       <DropdownMenuItem asChild>
                         <Link to="/admin" className="cursor-pointer">
                           <Shield className="mr-2 h-4 w-4" />
-                          {isSuperAdmin ? 'University Admin View' : 'Admin Panel'}
+                          {isSuperAdmin
+                            ? "University Admin View"
+                            : "Admin Panel"}
                         </Link>
                       </DropdownMenuItem>
                     </>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="cursor-pointer text-destructive"
+                  >
                     <LogOut className="mr-2 h-4 w-4" />
                     Sign Out
                   </DropdownMenuItem>
@@ -200,7 +271,11 @@ export function Header() {
           className="md:hidden"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
         >
-          {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          {mobileMenuOpen ? (
+            <X className="h-5 w-5" />
+          ) : (
+            <Menu className="h-5 w-5" />
+          )}
         </Button>
       </div>
 
@@ -208,7 +283,7 @@ export function Header() {
       {mobileMenuOpen && (
         <div className="md:hidden border-t bg-card">
           <nav className="container py-4 flex flex-col gap-2">
-            {navLinks.map(link => (
+            {navLinks.map((link) => (
               <Link
                 key={link.href}
                 to={link.href}

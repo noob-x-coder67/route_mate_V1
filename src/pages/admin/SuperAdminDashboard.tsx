@@ -160,7 +160,7 @@ export default function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {stats.totalUsers.toLocaleString()}
+                {(stats.totalUsers || 0).toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
                 Verified academic accounts
@@ -177,7 +177,7 @@ export default function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {stats.totalRides.toLocaleString()}
+                {(stats.totalUsers || 0).toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
                 Completed carpools
@@ -194,7 +194,7 @@ export default function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-primary">
-                {stats.totalCo2Saved.toFixed(1)} kg
+                {(stats.totalCo2Saved || 0).toFixed(1)} kg
               </div>
               <p className="text-xs text-muted-foreground">
                 Environmental footprint reduced

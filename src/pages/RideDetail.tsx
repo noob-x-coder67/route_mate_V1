@@ -254,7 +254,11 @@ export default function RideDetail() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => navigate("/messages")}
+                  onClick={() =>
+                    navigate(
+                      `/messages?userId=${route.driverId}&userName=${route.driver?.name}`,
+                    )
+                  }
                 >
                   <MessageSquare className="mr-2 h-4 w-4" />
                   Message Driver
