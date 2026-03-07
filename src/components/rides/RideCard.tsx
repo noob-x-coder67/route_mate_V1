@@ -1,6 +1,6 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Route } from "@/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { io } from "socket.io-client";
 import {
   Car,
   Bike,
@@ -55,6 +56,46 @@ export function RideCard({
   const { toast } = useToast();
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
+  const [rideStatus, setRideStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const checkStatus = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/rides/my-requests`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        const data = await res.json();
+        const match = (data.data?.rides || []).find(
+          (r: any) => r.routeId === route.id,
+        );
+        if (match) setRideStatus(match.status);
+      } catch (err) {}
+    };
+
+    checkStatus();
+
+    // Listen for real-time status update
+    const SOCKET_URL =
+      import.meta.env.VITE_API_URL?.replace("/api", "") ||
+      "http://localhost:5001";
+    const socket = io(SOCKET_URL);
+    socket.emit("join", user.id);
+    socket.on("rideStatusUpdate", (data: any) => {
+      if (data.routeId === route.id) {
+        setRideStatus(data.status);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user?.id, route.id]);
 
   const handleRequest = async () => {
     try {
@@ -205,12 +246,19 @@ export function RideCard({
             <Button
               className="flex-1"
               onClick={handleRequest}
-              disabled={requesting || requested || route.driverId === user?.id}
+              disabled={
+                requesting ||
+                !!rideStatus ||
+                requested ||
+                route.driverId === user?.id
+              }
             >
               {requesting
                 ? "Requesting..."
                 : requested
-                  ? "Requested ✓"
+                  ? rideStatus === "ACCEPTED"
+                    ? "Accepted ✓"
+                    : "Requested ✓"
                   : "Request Ride"}
             </Button>
             <Link to={`/messages`}>
@@ -297,12 +345,19 @@ export function RideCard({
             size="sm"
             className="flex-1"
             onClick={handleRequest}
-            disabled={requesting || requested || route.driverId === user?.id}
+            disabled={
+              requesting ||
+              !!rideStatus ||
+              requested ||
+              route.driverId === user?.id
+            }
           >
             {requesting
               ? "Requesting..."
               : requested
-                ? "Requested ✓"
+                ? rideStatus === "ACCEPTED"
+                  ? "Accepted ✓"
+                  : "Requested ✓"
                 : "Request"}
           </Button>
           {onViewMap && (

@@ -30,6 +30,7 @@ export default function RideDetail() {
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
+  const [isPassenger, setIsPassenger] = useState(false);
 
   useEffect(() => {
     const fetchRide = async () => {
@@ -54,6 +55,19 @@ export default function RideDetail() {
           datetime: r.departureTime,
           stops: r.stops || [],
         });
+
+        // Check if current user is already a passenger
+        const bookingsRes = await fetch(
+          `${import.meta.env.VITE_API_URL}/rides/my-bookings`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        );
+        const bookingsData = await bookingsRes.json();
+        const alreadyBooked = (bookingsData.data?.rides || []).some(
+          (b: any) => b.route?.id === r.id && b.status === "ACCEPTED",
+        );
+        setIsPassenger(alreadyBooked);
       } catch (err) {
         console.error("Failed to fetch ride:", err);
       } finally {
@@ -240,17 +254,26 @@ export default function RideDetail() {
             {/* Action Buttons */}
             {!isOwnRide && (
               <div className="space-y-2">
-                <Button
-                  className="w-full"
-                  onClick={handleRequest}
-                  disabled={requesting || requested}
-                >
-                  {requesting
-                    ? "Requesting..."
-                    : requested
-                      ? "Request Sent ✓"
-                      : "Request Ride"}
-                </Button>
+                {isPassenger ? (
+                  <Badge
+                    variant="secondary"
+                    className="w-full justify-center py-2"
+                  >
+                    You're a Passenger ✓
+                  </Badge>
+                ) : (
+                  <Button
+                    className="w-full"
+                    onClick={handleRequest}
+                    disabled={requesting || requested}
+                  >
+                    {requesting
+                      ? "Requesting..."
+                      : requested
+                        ? "Request Sent ✓"
+                        : "Request Ride"}
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   className="w-full"

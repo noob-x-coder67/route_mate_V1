@@ -92,6 +92,7 @@ function AppRoutes() {
         }
       />
       <Route path="/dashboard" element={<Navigate to="/home" replace />} />
+      <Route path="/ride-detail/:id" element={<RideDetail />} />
       <Route path="/find-carpool" element={<FindCarpool />} />
       <Route
         path="/offer-ride"

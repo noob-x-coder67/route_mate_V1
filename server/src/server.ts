@@ -16,7 +16,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
   },
 });
-
+app.set("io", io);
 
 // 4. Socket Event Listeners
 io.on("connection", (socket) => {

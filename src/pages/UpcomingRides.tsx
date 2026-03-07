@@ -2,6 +2,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { useAuth } from "@/contexts/AuthContext";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -26,7 +27,7 @@ import {
 } from "lucide-react";
 
 import { format } from "date-fns";
-import { Link } from "react-router-dom";
+
 
 export default function UpcomingRides() {
   const { user } = useAuth();
@@ -41,13 +42,15 @@ export default function UpcomingRides() {
     const fetchRides = async () => {
       try {
         const token = localStorage.getItem("token");
+        const headers = { Authorization: `Bearer ${token}` };
+        const now = new Date();
 
-        // Fetch available rides
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/rides`, {
-          headers: { Authorization: `Bearer ${token}` },
+        // Fetch driver's own routes
+        const driverRes = await fetch(`${import.meta.env.VITE_API_URL}/rides`, {
+          headers,
         });
-        const data = await response.json();
-        const mapped = (data.data.routes || []).map((r: any) => ({
+        const driverData = await driverRes.json();
+        const allRides = (driverData.data.routes || []).map((r: any) => ({
           ...r,
           pickup: {
             lat: r.originLat,
@@ -57,24 +60,48 @@ export default function UpcomingRides() {
           dropoff: { lat: r.destLat, lng: r.destLng, address: r.destAddress },
           datetime: r.departureTime,
         }));
-        setUpcomingAsDriver(mapped.filter((r: any) => r.driverId === user?.id));
-        setUpcomingAsPassenger(
-          mapped.filter((r: any) => r.driverId !== user?.id).slice(0, 3),
+        setUpcomingAsDriver(
+          allRides.filter(
+            (r: any) => r.driverId === user?.id && new Date(r.datetime) > now,
+          ),
         );
 
-        // Fetch pending requests for driver
-        const reqResponse = await fetch(
-          `${import.meta.env.VITE_API_URL}/rides/requests`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
+        // Fetch rides user booked as passenger (ACCEPTED only)
+        const passengerRes = await fetch(
+          `${import.meta.env.VITE_API_URL}/rides/my-bookings`,
+          { headers },
         );
-        const reqData = await reqResponse.json();
+        const passengerData = await passengerRes.json();
+        const bookedRides = (passengerData.data?.rides || [])
+          .filter((r: any) => new Date(r.route?.departureTime) > now)
+          .map((r: any) => ({
+            ...r.route,
+            pickup: {
+              lat: r.route.originLat,
+              lng: r.route.originLng,
+              address: r.route.originAddress,
+            },
+            dropoff: {
+              lat: r.route.destLat,
+              lng: r.route.destLng,
+              address: r.route.destAddress,
+            },
+            datetime: r.route.departureTime,
+          }));
+        setUpcomingAsPassenger(bookedRides);
+
+        // Fetch pending requests for driver
+        const reqRes = await fetch(
+          `${import.meta.env.VITE_API_URL}/rides/requests`,
+          { headers },
+        );
+        const reqData = await reqRes.json();
         setPendingRequests(reqData.data.requests || []);
       } catch (err) {
         console.error("Failed to fetch rides:", err);
       }
     };
+    fetchRides(); // ← THIS WAS MISSING
   }, [user]);
 
   const handleManageRequest = async (
@@ -121,116 +148,173 @@ export default function UpcomingRides() {
       .slice(0, 2);
   };
 
-  const RideCard = ({
-    route,
-    role,
-  }: {
-    route: any;
-    role: "driver" | "passenger";
-  }) => (
-    <Card className="hover:border-primary/30 transition-colors">
-      <CardContent className="pt-6">
-        <div className="flex items-start gap-4">
-          {/* Vehicle Icon */}
-          <div
-            className={`h-12 w-12 rounded-xl flex items-center justify-center ${
-              role === "driver"
-                ? "bg-primary/10 text-primary"
-                : "bg-accent text-accent-foreground"
-            }`}
-          >
-            {route.vehicle === "CAR" ? (
-              <Car className="h-6 w-6" />
-            ) : (
-              <Bike className="h-6 w-6" />
-            )}
-          </div>
+  const handleCancel = async (routeId: string, role: string) => {
+    if (!confirm("Are you sure you want to cancel this ride?")) return;
+    try {
+      const token = localStorage.getItem("token");
+      const url =
+        role === "driver"
+          ? `${import.meta.env.VITE_API_URL}/rides/${routeId}/cancel-route`
+          : `${import.meta.env.VITE_API_URL}/rides/${routeId}/cancel-request`;
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to cancel");
+      if (role === "driver") {
+        setUpcomingAsDriver((prev) => prev.filter((r) => r.id !== routeId));
+      } else {
+        setUpcomingAsPassenger((prev) => prev.filter((r) => r.id !== routeId));
+      }
+      toast({ title: "Ride cancelled successfully" });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
 
-          {/* Ride Details */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2">
-              <Badge variant={role === "driver" ? "default" : "secondary"}>
-                {role === "driver" ? "You're Driving" : "Passenger"}
-              </Badge>
-              {route.womenOnly && (
-                <Badge
-                  variant="outline"
-                  className="text-pink-600 border-pink-300"
-                >
-                  Women Only
-                </Badge>
+  const RideCard = ({ route, role }: { route: any; role: "driver" | "passenger" }) => {
+    const navigate = useNavigate();
+    return (
+      <Card className="hover:border-primary/30 transition-colors">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-4">
+            {/* Vehicle Icon */}
+            <div
+              className={`h-12 w-12 rounded-xl flex items-center justify-center ${
+                role === "driver"
+                  ? "bg-primary/10 text-primary"
+                  : "bg-accent text-accent-foreground"
+              }`}
+            >
+              {route.vehicle === "CAR" ? (
+                <Car className="h-6 w-6" />
+              ) : (
+                <Bike className="h-6 w-6" />
               )}
             </div>
 
-            {/* Route */}
-            <div className="flex items-center gap-2 mb-2">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">
-                {route.pickup.address.split(",")[0]} →{" "}
-                {route.dropoff.address.split(",")[0]}
-              </span>
-            </div>
-
-            {/* Date & Time */}
-            <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
-              <span className="flex items-center gap-1">
-                <CalendarDays className="h-3 w-3" />
-                {format(new Date(route.datetime), "EEE, MMM d, yyyy")}
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {format(new Date(route.datetime), "h:mm a")}
-              </span>
-            </div>
-
-            {/* Driver/Passenger Info */}
-            {role === "passenger" && route.driver && (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                    {getInitials(route.driver.name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{route.driver.name}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Star className="h-3 w-3 fill-primary text-primary" />
-                      {route.driver.rating.toFixed(1)}
-                    </span>
-                    <span>•</span>
-                    <span>{route.driver.department}</span>
-                  </div>
-                </div>
+            {/* Ride Details */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant={role === "driver" ? "default" : "secondary"}>
+                  {role === "driver" ? "You're Driving" : "Passenger"}
+                </Badge>
+                {route.womenOnly && (
+                  <Badge
+                    variant="outline"
+                    className="text-pink-600 border-pink-300"
+                  >
+                    Women Only
+                  </Badge>
+                )}
               </div>
-            )}
 
-            {/* Available Seats */}
-            {role === "driver" && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Users className="h-4 w-4" />
-                <span>
-                  {route.availableSeats} of {route.totalSeats} seats available
+              {/* Route */}
+              <div className="flex items-center gap-2 mb-2">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">
+                  {route.pickup.address.split(",")[0]} →{" "}
+                  {route.dropoff.address.split(",")[0]}
                 </span>
               </div>
-            )}
-          </div>
 
-          {/* Actions */}
-          <div className="flex flex-col gap-2">
-            <Button size="sm" variant="outline">
-              <MessageSquare className="h-4 w-4 mr-1" />
-              Chat
-            </Button>
-            <Button size="sm" variant="ghost">
-              <Navigation className="h-4 w-4 mr-1" />
-              Track
-            </Button>
+              {/* Date & Time */}
+              <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
+                <span className="flex items-center gap-1">
+                  <CalendarDays className="h-3 w-3" />
+                  {format(new Date(route.datetime), "EEE, MMM d, yyyy")}
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  {format(new Date(route.datetime), "h:mm a")}
+                </span>
+              </div>
+
+              {/* Driver/Passenger Info */}
+              {role === "passenger" && route.driver && (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                      {getInitials(route.driver.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{route.driver.name}</p>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Star className="h-3 w-3 fill-primary text-primary" />
+                        {route.driver.rating.toFixed(1)}
+                      </span>
+                      <span>•</span>
+                      <span>{route.driver.department}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Available Seats */}
+              {role === "driver" && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  <span>
+                    {route.availableSeats} of {route.totalSeats} seats available
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+
+            <div className="flex flex-col gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (role === "passenger" && route.driver) {
+                    navigate(
+                      `/messages?userId=${route.driver.id}&userName=${encodeURIComponent(route.driver.name)}`,
+                    );
+                  } else if (role === "driver") {
+                    navigate(`/messages?rideId=${route.id}`);
+                  }
+                }}
+              >
+                <MessageSquare className="h-4 w-4 mr-1" />
+                Chat
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() =>
+                  navigate(`/ride-detail/${route.id}`, {
+                    state: {
+                      pickup: route.pickup,
+                      dropoff: route.dropoff,
+                      datetime: route.datetime,
+                    },
+                  })
+                }
+              >
+                <Navigation className="h-4 w-4 mr-1" />
+                Track
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => handleCancel(route.id, role)}
+              >
+                Cancel
+              </Button>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Layout>
