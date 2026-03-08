@@ -1,53 +1,131 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
-import { Star, Loader2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Star } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface RatingModalProps {
   open: boolean;
-  onOpenChange: (open: boolean) => void;
-  rideId: string | null;
+  onClose: () => void;
+  driverName: string;
+  rideId: string;
 }
 
-export function RatingModal({ open, onOpenChange, rideId }: RatingModalProps) {
-  const [rating, setRating] = useState(0);
-  const [hoveredRating, setHoveredRating] = useState(0);
-  const [comment, setComment] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+export function RatingModal({
+  open,
+  onClose,
+  driverName,
+  rideId,
+}: RatingModalProps) {
+  const [hovered, setHovered] = useState(0);
+  const [selected, setSelected] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
   const handleSubmit = async () => {
-    if (rating === 0) return;
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 800));
-    toast({ title: 'Rating submitted!', description: 'Thank you for your feedback.' });
-    setIsLoading(false);
-    setRating(0);
-    setComment('');
-    onOpenChange(false);
+    if (!selected) return;
+    setSubmitting(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/rides/${rideId}/rate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ rating: selected }),
+        },
+      );
+      if (!res.ok) throw new Error("Failed to submit rating");
+      toast({
+        title: "Rating submitted! ⭐",
+        description: `You rated ${driverName} ${selected} stars.`,
+      });
+      // Notify FindCarpool and UpcomingRides to refresh driver ratings
+      window.dispatchEvent(new CustomEvent("ratingSubmitted"));
+      onClose();
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
+  const labels = ["", "Poor", "Fair", "Good", "Great", "Excellent"];
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm mx-auto">
         <DialogHeader>
-          <DialogTitle>Rate Your Ride</DialogTitle>
-          <DialogDescription>How was your experience?</DialogDescription>
+          <DialogTitle className="text-center text-xl">
+            Rate Your Ride 🎉
+          </DialogTitle>
+          <DialogDescription className="text-center">
+            How was your experience with{" "}
+            <span className="font-semibold text-foreground">{driverName}</span>?
+          </DialogDescription>
         </DialogHeader>
-        <div className="flex justify-center gap-2 py-4">
-          {[1,2,3,4,5].map(star => (
-            <button key={star} onClick={() => setRating(star)} onMouseEnter={() => setHoveredRating(star)} onMouseLeave={() => setHoveredRating(0)}>
-              <Star className={cn('h-10 w-10 transition-colors', (hoveredRating || rating) >= star ? 'fill-primary text-primary' : 'text-muted-foreground')} />
-            </button>
-          ))}
+
+        <div className="flex flex-col items-center gap-6 py-4">
+          {/* Stars */}
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                onMouseEnter={() => setHovered(star)}
+                onMouseLeave={() => setHovered(0)}
+                onClick={() => setSelected(star)}
+                className="transition-transform hover:scale-110 active:scale-95"
+              >
+                <Star
+                  className={`h-10 w-10 transition-colors ${
+                    star <= (hovered || selected)
+                      ? "fill-yellow-400 text-yellow-400"
+                      : "text-muted-foreground/30"
+                  }`}
+                />
+              </button>
+            ))}
+          </div>
+
+          {/* Label */}
+          <p
+            className={`text-lg font-semibold transition-opacity ${hovered || selected ? "opacity-100" : "opacity-0"}`}
+          >
+            {labels[hovered || selected]}
+          </p>
+
+          {/* Buttons */}
+          <div className="flex gap-3 w-full">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              Skip
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleSubmit}
+              disabled={!selected || submitting}
+            >
+              {submitting ? "Submitting..." : "Submit Rating"}
+            </Button>
+          </div>
         </div>
-        <Textarea placeholder="Leave a comment (optional)" value={comment} onChange={e => setComment(e.target.value)} />
-        <Button onClick={handleSubmit} disabled={rating === 0 || isLoading} className="w-full">
-          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Submit Rating
-        </Button>
       </DialogContent>
     </Dialog>
   );

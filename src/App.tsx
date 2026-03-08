@@ -1,4 +1,6 @@
 import RideDetail from "./pages/RideDetail";
+import { RatingModal } from "@/components/rides/RatingModal";
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -77,6 +79,39 @@ function UniversityAdminRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/home" replace />;
   }
   return <>{children}</>;
+}
+
+// Global Rating Modal - lives outside routes so it works on ANY page
+function GlobalRatingModal() {
+  const [modal, setModal] = useState<{
+    open: boolean;
+    driverName: string;
+    rideId: string;
+  }>({
+    open: false,
+    driverName: "",
+    rideId: "",
+  });
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { rideId, driverName } = (e as CustomEvent).detail;
+      if (rideId && driverName) {
+        setModal({ open: true, driverName, rideId });
+      }
+    };
+    window.addEventListener("rideCompleted", handler);
+    return () => window.removeEventListener("rideCompleted", handler);
+  }, []);
+
+  return (
+    <RatingModal
+      open={modal.open}
+      onClose={() => setModal((prev) => ({ ...prev, open: false }))}
+      driverName={modal.driverName}
+      rideId={modal.rideId}
+    />
+  );
 }
 
 function AppRoutes() {
@@ -189,6 +224,7 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <GlobalRatingModal />
           <BrowserRouter>
             <AppRoutes />
           </BrowserRouter>

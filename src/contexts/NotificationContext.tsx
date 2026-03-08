@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   ReactNode,
+  useCallback,
 } from "react";
 import { Notification } from "@/types";
 import { io } from "socket.io-client";
@@ -30,19 +31,19 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const addNotification = (
-    notification: Omit<Notification, "id" | "createdAt" | "read">,
-  ) => {
-    const newNotification: Notification = {
-      ...notification,
-      id: `notif-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      read: false,
-    };
-    setNotifications((prev) => [newNotification, ...prev]);
-  };
+  const addNotification = useCallback(
+    (notification: Omit<Notification, "id" | "createdAt" | "read">) => {
+      const newNotification: Notification = {
+        ...notification,
+        id: `notif-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        read: false,
+      };
+      setNotifications((prev) => [newNotification, ...prev]);
+    },
+    [],
+  );
 
-  // Connect socket and listen for real-time notifications
   useEffect(() => {
     if (!isAuthenticated || !user?.id) return;
 
@@ -57,25 +58,86 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       if (data.type === "ride_request") {
         addNotification({
           type: "ride_request",
-          title: "New Ride Request",
+          title: "New Ride Request 🚗",
           message: data.message,
           actionUrl: "/upcoming-rides",
           relatedId: data.rideId,
         });
+        // Tell UpcomingRides to re-fetch pending requests immediately
+        window.dispatchEvent(new CustomEvent("newRideRequest"));
+      } else if (data.type === "ride_accepted") {
+        addNotification({
+          type: "ride_accepted",
+          title: "Ride Accepted! 🎉",
+          message: data.message,
+          actionUrl: "/upcoming-rides",
+          relatedId: data.rideId,
+        });
+
+        // ✅ Auto-redirect passenger to upcoming rides page
+        // Use a small delay so the notification toast shows first
+        setTimeout(() => {
+          window.location.href = "/upcoming-rides";
+        }, 1500);
+      } else if (data.type === "ride_rejected") {
+        addNotification({
+          type: "ride_rejected",
+          title: "Ride Declined",
+          message: data.message,
+          actionUrl: "/find-carpool",
+          relatedId: data.rideId,
+        });
+      } else if (data.type === "ride_completed") {
+        addNotification({
+          type: "ride_accepted",
+          title: "Ride Completed! ✅",
+          message: data.message || "Your ride has been completed.",
+          actionUrl: "/history",
+        });
+        // Remove from upcoming rides + trigger rating modal
+        window.dispatchEvent(
+          new CustomEvent("rideCompleted", {
+            detail: {
+              routeId: data.routeId,
+              driverName: data.driverName,
+              rideId: data.rideId,
+            },
+          }),
+        );
       } else if (data.type === "message") {
         addNotification({
           type: "new_message",
-          title: "New Message",
+          title: "New Message 💬",
           message: "You have a new message",
           actionUrl: "/messages",
         });
       }
     });
 
+    // Real-time seat count changes → any page with RideCard updates live
+    socket.on(
+      "routeUpdated",
+      (data: { routeId: string; availableSeats: number }) => {
+        window.dispatchEvent(new CustomEvent("routeUpdated", { detail: data }));
+      },
+    );
+
+    // Driver started a 2-min wait → show countdown to driver + all passengers
+    socket.on("driverWaiting", (data: { routeId: string; endTime: number }) => {
+      window.dispatchEvent(new CustomEvent("driverWaiting", { detail: data }));
+    });
+
+    // 2-min wait expired → auto-start the ride
+    socket.on("waitTimerExpired", (data: { routeId: string }) => {
+      window.dispatchEvent(
+        new CustomEvent("waitTimerExpired", { detail: data }),
+      );
+    });
+
     return () => {
       socket.disconnect();
     };
-  }, [isAuthenticated, user?.id]);
+  }, [isAuthenticated, user?.id, addNotification]);
 
   const markAsRead = (id: string) => {
     setNotifications((prev) =>
@@ -109,10 +171,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
 export function useNotifications() {
   const context = useContext(NotificationContext);
-  if (context === undefined) {
+  if (context === undefined)
     throw new Error(
       "useNotifications must be used within a NotificationProvider",
     );
-  }
   return context;
 }

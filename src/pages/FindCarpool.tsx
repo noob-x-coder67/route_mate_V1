@@ -70,6 +70,70 @@ export default function FindCarpool() {
     };
     fetchRides();
   }, []);
+
+  // Wait timers for rides where driver chose to wait: routeId -> endTime
+  const [waitTimers, setWaitTimers] = useState<Record<string, number>>({});
+
+  // Re-fetch rides after a rating is submitted so driver stars are up-to-date
+  useEffect(() => {
+    const handler = () => {
+      const token = localStorage.getItem("token");
+      fetch(`${import.meta.env.VITE_API_URL}/rides`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          const mapped = (data.data.routes || []).map((r: any) => ({
+            ...r,
+            pickup: {
+              lat: r.originLat,
+              lng: r.originLng,
+              address: r.originAddress,
+            },
+            dropoff: { lat: r.destLat, lng: r.destLng, address: r.destAddress },
+            datetime: r.departureTime,
+            status: "ACTIVE" as any,
+          }));
+          setEnrichedRoutes(mapped);
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("ratingSubmitted", handler);
+    return () => window.removeEventListener("ratingSubmitted", handler);
+  }, []);
+
+  // Real-time seat count updates from socket
+  useEffect(() => {
+    const onRouteUpdated = (e: Event) => {
+      const { routeId, availableSeats } = (e as CustomEvent).detail;
+      setEnrichedRoutes((prev) =>
+        prev.map((r) => (r.id === routeId ? { ...r, availableSeats } : r)),
+      );
+    };
+    const onDriverWaiting = (e: Event) => {
+      const { routeId, endTime } = (e as CustomEvent).detail;
+      setWaitTimers((prev) => ({ ...prev, [routeId]: endTime }));
+    };
+    const onWaitTimerExpired = (e: Event) => {
+      const { routeId } = (e as CustomEvent).detail;
+      setWaitTimers((prev) => {
+        const n = { ...prev };
+        delete n[routeId];
+        return n;
+      });
+      // Remove from list — ride is starting, no more new requests
+      setEnrichedRoutes((prev) => prev.filter((r) => r.id !== routeId));
+    };
+    window.addEventListener("routeUpdated", onRouteUpdated);
+    window.addEventListener("driverWaiting", onDriverWaiting);
+    window.addEventListener("waitTimerExpired", onWaitTimerExpired);
+    return () => {
+      window.removeEventListener("routeUpdated", onRouteUpdated);
+      window.removeEventListener("driverWaiting", onDriverWaiting);
+      window.removeEventListener("waitTimerExpired", onWaitTimerExpired);
+    };
+  }, []);
+
   // Filter routes based on search criteria
   const filteredRoutes = useMemo(() => {
     return enrichedRoutes.filter((route) => {
@@ -100,11 +164,11 @@ export default function FindCarpool() {
         return false;
       }
 
-      if (filters.femaleDriverOnly && route.driver?.gender !== "female") {
+      if (filters.femaleDriverOnly && route.driver?.gender !== "FEMALE") {
         return false;
       }
 
-      if (filters.maleDriverOnly && route.driver?.gender !== "male") {
+      if (filters.maleDriverOnly && route.driver?.gender !== "MALE") {
         return false;
       }
 
@@ -123,7 +187,7 @@ export default function FindCarpool() {
         return false;
       }
 
-      if (filters.noSmoking && route.driver?.preferences.noSmoking === false) {
+      if (filters.noSmoking && route.driver?.preferences?.noSmoking === false) {
         return false;
       }
 
@@ -281,6 +345,7 @@ export default function FindCarpool() {
                   key={route.id}
                   route={route}
                   onViewMap={() => handleRouteSelect(route)}
+                  waitEndsAt={waitTimers[route.id] ?? null}
                 />
               ))
             ) : (

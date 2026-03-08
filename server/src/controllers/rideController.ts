@@ -7,6 +7,9 @@ import { AppError } from "../utils/error";
 /**
  * GET AVAILABLE RIDES
  */
+// In-memory wait timers: routeId -> NodeJS.Timeout
+const waitTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export const getAvailableRides = async (
   req: any,
   res: Response,
@@ -29,6 +32,7 @@ export const getAvailableRides = async (
             department: true,
           },
         },
+        rides: { where: { status: "ACCEPTED" }, select: { id: true } },
       },
       orderBy: { departureTime: "asc" },
     });
@@ -39,32 +43,79 @@ export const getAvailableRides = async (
 };
 
 // Driver cancels their route
-export const cancelRoute = async (req: any, res: Response, next: NextFunction) => {
+export const cancelRoute = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const { routeId } = req.params;
     const route = await prisma.route.findUnique({ where: { id: routeId } });
     if (!route || route.driverId !== req.user.id) {
-      return next(new AppError('Unauthorized', 403));
+      return next(new AppError("Unauthorized", 403));
     }
     await prisma.route.update({
       where: { id: routeId },
-      data: { status: 'CANCELLED' }
+      data: { status: "CANCELLED" },
     });
-    res.status(200).json({ status: 'success' });
-  } catch (error) { next(error); }
+    res.status(200).json({ status: "success" });
+  } catch (error) {
+    next(error);
+  }
 };
 
-// Passenger cancels their request
-export const cancelRequest = async (req: any, res: Response, next: NextFunction) => {
+// Driver closes seats (stops new requests, keeps existing passengers)
+export const closeSeats = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const { routeId } = req.params;
-    await prisma.ride.deleteMany({
-      where: { routeId, passengerId: req.user.id }
+    const route = await prisma.route.findUnique({ where: { id: routeId } });
+    if (!route || route.driverId !== req.user.id) {
+      return next(new AppError("Unauthorized", 403));
+    }
+    await prisma.route.update({
+      where: { id: routeId },
+      data: { availableSeats: 0 },
     });
-    res.status(200).json({ status: 'success' });
-  } catch (error) { next(error); }
+    const io = req.app.get("io");
+    if (io) io.emit("routeUpdated", { routeId, availableSeats: 0 });
+    res.status(200).json({ status: "success" });
+  } catch (error) {
+    next(error);
+  }
 };
 
+// Passenger cancels their request - restore reserved seats
+export const cancelRequest = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { routeId } = req.params;
+    const pendingRide = await prisma.ride.findFirst({
+      where: {
+        routeId,
+        passengerId: req.user.id,
+        status: { in: ["PENDING", "ACCEPTED"] },
+      },
+    });
+    if (pendingRide) {
+      await prisma.ride.delete({ where: { id: pendingRide.id } });
+      // Restore seat (seats were pre-decremented on request)
+      await prisma.route.update({
+        where: { id: routeId },
+        data: { availableSeats: { increment: 1 } },
+      });
+    }
+    res.status(200).json({ status: "success" });
+  } catch (error) {
+    next(error);
+  }
+};
 
 export const getMyBookings = async (
   req: any,
@@ -148,11 +199,16 @@ export const requestRide = async (
   next: NextFunction,
 ) => {
   try {
-    const { routeId } = req.body;
+    const { routeId, seatsRequested = 1 } = req.body;
 
     const route = await prisma.route.findUnique({ where: { id: routeId } });
-    if (!route || route.availableSeats < 1) {
-      return next(new AppError("No seats available or ride not found", 400));
+    if (!route) {
+      return next(new AppError("Ride not found", 404));
+    }
+    if (route.availableSeats < seatsRequested) {
+      return next(
+        new AppError(`Only ${route.availableSeats} seat(s) available`, 400),
+      );
     }
 
     const rideRequest = await prisma.ride.create({
@@ -160,16 +216,31 @@ export const requestRide = async (
         routeId,
         passengerId: req.user.id,
         status: "PENDING",
+        // seatsRequested stored in-memory via notification; no DB migration needed
       },
     });
-    // After prisma.ride.create(...)
+
+    // Reserve the seats immediately at request time (prevents overbooking)
+    // We'll release them if driver rejects
+    await prisma.route.update({
+      where: { id: routeId },
+      data: { availableSeats: { decrement: seatsRequested } },
+    });
+
+    const newAvailableSeats = route.availableSeats - seatsRequested;
     const io = req.app.get("io");
     if (io) {
+      const seatMsg =
+        seatsRequested > 1 ? ` (needs ${seatsRequested} seats)` : "";
+      // Notify driver
       io.to(route.driverId).emit("newNotification", {
         type: "ride_request",
-        message: `${req.user.name} requested your ride`,
+        message: `${req.user.name} requested your ride${seatMsg}`,
         rideId: route.id,
+        seatsRequested,
       });
+      // Broadcast seat count change to ALL viewers in real-time
+      io.emit("routeUpdated", { routeId, availableSeats: newAvailableSeats });
     }
 
     res.status(201).json({ status: "success", data: { ride: rideRequest } });
@@ -190,10 +261,10 @@ export const manageRideRequest = async (
     const { rideId } = req.params;
     const { status } = req.body; // 'ACCEPTED' or 'REJECTED'
 
-    const ride = await prisma.ride.findUnique({
+    const ride = (await prisma.ride.findUnique({
       where: { id: rideId },
       include: { route: true },
-    });
+    })) as any;
 
     if (!ride || ride.route.driverId !== req.user.id) {
       return next(new AppError("Unauthorized access", 403));
@@ -222,12 +293,19 @@ export const manageRideRequest = async (
         });
       }
 
-      // Decrement seats only if accepted
-      if (status === "ACCEPTED") {
-        await tx.route.update({
+      // Seats were already reserved at request time
+      // On REJECT: restore seats. On ACCEPT: nothing to change.
+      if (status === "REJECTED") {
+        const restoredRoute = await tx.route.update({
           where: { id: ride.routeId },
-          data: { availableSeats: { decrement: 1 } },
+          data: { availableSeats: { increment: 1 } },
         });
+        const io = req.app.get("io");
+        if (io)
+          io.emit("routeUpdated", {
+            routeId: ride.routeId,
+            availableSeats: restoredRoute.availableSeats,
+          });
       }
       return updated;
     });
@@ -296,6 +374,26 @@ export const completeRide = async (
         data: { status: "COMPLETED" },
       }),
     ]);
+
+    // Fetch driver name for the rating notification
+    const driver = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+
+    // Notify all passengers that the ride is completed via socket
+    const io = req.app.get("io");
+    if (io) {
+      route.rides.forEach((ride) => {
+        io.to(ride.passengerId).emit("newNotification", {
+          type: "ride_completed",
+          message: "Your ride has been completed! 🎉",
+          routeId,
+          rideId: ride.id,
+          driverName: driver?.name || "Your driver",
+        });
+      });
+    }
 
     res.status(200).json({
       status: "success",
@@ -422,6 +520,135 @@ export const getMyRequests = async (
       include: { route: true },
     });
     res.status(200).json({ status: "success", data: { rides } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET DRIVER'S OWN UPCOMING ROUTES (no seat filter — even fully-booked routes show)
+ */
+export const getMyDriverRoutes = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const routes = await prisma.route.findMany({
+      where: {
+        driverId: req.user.id,
+        status: "PENDING",
+        departureTime: { gt: new Date() },
+      },
+      include: {
+        driver: {
+          select: {
+            id: true,
+            name: true,
+            gender: true,
+            rating: true,
+            department: true,
+          },
+        },
+        rides: { where: { status: "ACCEPTED" }, select: { id: true } },
+      },
+      orderBy: { departureTime: "asc" },
+    });
+    res.status(200).json({ status: "success", data: { routes } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * START WAIT TIMER — driver waits up to 2 minutes for more passengers
+ */
+export const startWaitTimer = async (
+  req: any,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const { routeId } = req.params;
+    const route = await prisma.route.findUnique({ where: { id: routeId } });
+    if (!route || route.driverId !== req.user.id) {
+      return next(new AppError("Unauthorized", 403));
+    }
+
+    const WAIT_MS = 120_000; // 2 minutes
+    const endTime = Date.now() + WAIT_MS;
+    const io = req.app.get("io");
+
+    // Broadcast to ALL connected clients (driver + all passengers viewing this route)
+    if (io) io.emit("driverWaiting", { routeId, endTime });
+
+    // Clear any pre-existing timer for this route
+    if (waitTimers.has(routeId)) clearTimeout(waitTimers.get(routeId)!);
+
+    // Auto-fire after 2 min
+    const timer = setTimeout(async () => {
+      waitTimers.delete(routeId);
+      // Close seats so no new requests come in after time expires
+      await prisma.route.update({
+        where: { id: routeId },
+        data: { availableSeats: 0 },
+      });
+      if (io) {
+        io.emit("routeUpdated", { routeId, availableSeats: 0 });
+        io.emit("waitTimerExpired", { routeId });
+      }
+    }, WAIT_MS);
+
+    waitTimers.set(routeId, timer);
+    res.status(200).json({ status: "success", data: { endTime } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * RATE A RIDE - passenger rates the driver after completion
+ */
+export const rateRide = async (req: any, res: Response, next: NextFunction) => {
+  const { rideId } = req.params;
+  const { rating } = req.body;
+  const passengerId = req.user.id;
+
+  if (!rating || rating < 1 || rating > 5) {
+    return next(new AppError("Rating must be between 1 and 5", 400));
+  }
+
+  try {
+    // Verify this passenger was on this ride
+    const ride = await prisma.ride.findFirst({
+      where: { id: rideId, passengerId, status: "COMPLETED" },
+      include: { route: { select: { driverId: true } } },
+    });
+
+    if (!ride) {
+      return next(new AppError("Ride not found or not completed", 404));
+    }
+
+    const driverId = ride.route.driverId;
+
+    // Get current driver stats
+    const driver = await prisma.user.findUnique({
+      where: { id: driverId },
+      select: { rating: true, totalRatings: true },
+    });
+
+    if (!driver) return next(new AppError("Driver not found", 404));
+
+    // Weighted average
+    const newTotal = driver.totalRatings + 1;
+    const newRating = (driver.rating * driver.totalRatings + rating) / newTotal;
+
+    await prisma.user.update({
+      where: { id: driverId },
+      data: { rating: newRating, totalRatings: newTotal },
+    });
+
+    res.status(200).json({ status: "success", message: "Rating submitted!" });
   } catch (error) {
     next(error);
   }

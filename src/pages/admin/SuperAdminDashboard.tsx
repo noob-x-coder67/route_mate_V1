@@ -177,7 +177,7 @@ export default function SuperAdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {(stats.totalUsers || 0).toLocaleString()}
+                {(stats.totalRides || 0).toLocaleString()}
               </div>
               <p className="text-xs text-muted-foreground">
                 Completed carpools

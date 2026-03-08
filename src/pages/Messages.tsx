@@ -130,7 +130,7 @@ export default function Messages() {
       setMessages(data.data.messages || []);
 
       // Wait for markAsRead to complete first
-      await fetch(`${API_URL}/messages/${userId}`, {
+      await fetch(`${API_URL}/messages/${userId}/read`, {
         method: "PATCH",
         headers,
       });

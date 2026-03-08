@@ -32,24 +32,14 @@ import {
 import { format } from "date-fns";
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [profileModalOpen, setProfileModalOpen] = useState(false);
-
-  if (!user) {
-    return null;
-  }
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  // Get upcoming rides (show sample data regardless of user)
   const [upcomingRides, setUpcomingRides] = useState<any[]>([]);
+
+  // Always fetch fresh stats from DB on mount
+  useEffect(() => {
+    refreshUser();
+  }, []);
 
   useEffect(() => {
     const fetchRides = async () => {
@@ -76,6 +66,17 @@ export default function Home() {
     };
     fetchRides();
   }, []);
+
+  if (!user) return null;
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   const stats = [
     {
@@ -104,26 +105,26 @@ export default function Home() {
 
   return (
     <Layout>
-      <div className="container py-8">
+      <div className="container py-4 md:py-8">
         {/* Welcome Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
           <div>
-            <h1 className="text-3xl font-bold mb-1">
+            <h1 className="text-2xl md:text-3xl font-bold mb-0.5">
               Welcome back, {user.name.split(" ")[0]}! 👋
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Here's what's happening with your carpools today.
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <Link to="/find-carpool">
-              <Button variant="outline">
+              <Button variant="outline" size="sm">
                 <Search className="mr-2 h-4 w-4" />
                 Find Carpool
               </Button>
             </Link>
             <Link to="/offer-ride">
-              <Button>
+              <Button size="sm">
                 <Plus className="mr-2 h-4 w-4" />
                 Offer Ride
               </Button>
@@ -131,7 +132,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
           {/* Left Column - Profile & Stats */}
           <div className="space-y-6">
             {/* Profile Card */}
@@ -276,9 +277,9 @@ export default function Home() {
                     {upcomingRides.map((route) => (
                       <div
                         key={route.id}
-                        className="flex items-center gap-4 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                        className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors overflow-hidden"
                       >
-                        <div className="h-12 w-12 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                        <div className="h-10 w-10 flex-shrink-0 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                           {route.vehicle === "CAR" ? (
                             <Car className="h-6 w-6" />
                           ) : (
@@ -307,6 +308,7 @@ export default function Home() {
                         </div>
                         <Badge
                           variant={route.womenOnly ? "secondary" : "outline"}
+                          className="flex-shrink-0 text-xs"
                         >
                           {route.womenOnly ? "Women Only" : "Open"}
                         </Badge>

@@ -1,8 +1,13 @@
 // --- Enums & Literals (Matching Prisma Schema) ---
-export type UserRole = 'STUDENT' | 'UNIVERSITY_ADMIN' | 'SUPER_ADMIN';
-export type Gender = 'MALE' | 'FEMALE';
-export type RideStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'COMPLETED' | 'CANCELLED';
-export type VehicleType = 'BIKE' | 'CAR';
+export type UserRole = "STUDENT" | "UNIVERSITY_ADMIN" | "SUPER_ADMIN";
+export type Gender = "MALE" | "FEMALE";
+export type RideStatus =
+  | "PENDING"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "COMPLETED"
+  | "CANCELLED";
+export type VehicleType = "BIKE" | "CAR";
 
 // --- University Model ---
 export interface University {
@@ -34,7 +39,7 @@ export interface User {
   ridesTaken: number;
   co2Saved: number;
   fuelSaved: number;
-  token?: string; 
+  token?: string;
   preferences?: UserPreferences;
   createdAt: string;
 }
@@ -61,7 +66,7 @@ export interface Location {
 
 export interface RecurringSchedule {
   enabled: boolean;
-  type: 'daily' | 'weekdays' | 'weekly';
+  type: "daily" | "weekdays" | "weekly";
   days: number[];
   endDate?: string;
 }
@@ -71,22 +76,22 @@ export interface Route {
   id: string;
   driverId: string;
   driver?: User;
-  originLat: number;      // Aligned with Prisma float fields
+  originLat: number; // Aligned with Prisma float fields
   originLng: number;
   originAddress: string;
   destLat: number;
   destLng: number;
   destAddress: string;
-  pickup?: Location;      // For backward compatibility with UI
-  dropoff?: Location;     // For backward compatibility with UI
+  pickup?: Location; // For backward compatibility with UI
+  dropoff?: Location; // For backward compatibility with UI
   stops?: Location[] | any;
-  distance: number;       // Added for CO2 calculations
+  distance: number; // Added for CO2 calculations
   datetime: string;
   vehicle: VehicleType;
   availableSeats: number;
   totalSeats: number;
   womenOnly: boolean;
-  status: RideStatus;     // Changed from 'active' literal to use the enum
+  status: RideStatus; // Changed from 'active' literal to use the enum
   createdAt: string;
   recurring?: RecurringSchedule;
 }
@@ -98,7 +103,7 @@ export interface Ride {
   route?: Route;
   passengerId: string;
   passenger?: User;
-  status: RideStatus; 
+  status: RideStatus;
   feedback?: Feedback;
   createdAt: string;
 }
@@ -129,7 +134,12 @@ export interface Conversation {
 
 export interface Notification {
   id: string;
-  type: 'ride_request' | 'ride_accepted' | 'ride_rejected' | 'new_message' | 'ride_reminder';
+  type:
+    | "ride_request"
+    | "ride_accepted"
+    | "ride_rejected"
+    | "new_message"
+    | "ride_reminder";
   title: string;
   message: string;
   read: boolean;
@@ -167,4 +177,13 @@ export interface SustainabilityStats {
   totalRides: number;
   treesEquivalent: number;
   moneySaved: number;
+}
+// --- Ride Search Filters ---
+export interface RideSearchFilters {
+  minSeats?: number;
+  femaleDriverOnly?: boolean;
+  maleDriverOnly?: boolean;
+  sameDepartment?: boolean;
+  ratedDriversOnly?: boolean;
+  noSmoking?: boolean;
 }

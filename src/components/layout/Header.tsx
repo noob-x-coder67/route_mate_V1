@@ -23,9 +23,17 @@ import {
   Shield,
   Building2,
   Crown,
+  Bell,
+  Home,
+  Search,
+  Car,
+  CalendarDays,
+  Clock,
+  History,
 } from "lucide-react";
 import { AuthModal } from "@/components/auth/AuthModal";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import { useNotifications } from "@/contexts/NotificationContext";
 
 export function Header() {
   const { user, isAuthenticated, logout, isSuperAdmin, isUniversityAdmin } =
@@ -38,6 +46,7 @@ export function Header() {
   );
 
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const { unreadCount: notifUnreadCount } = useNotifications();
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -106,7 +115,9 @@ export function Header() {
         { label: "Home", href: "/home" },
         { label: "Find Carpool", href: "/find-carpool" },
         { label: "Offer Ride", href: "/offer-ride" },
+        { label: "Upcoming Rides", href: "/upcoming-rides" },
         { label: "Messages", href: "/messages" },
+        { label: "History", href: "/history" },
       ]
     : [
         { label: "Features", href: "/#features" },
@@ -117,7 +128,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-      <div className="container flex h-16 items-center justify-between">
+      <div className="container flex h-14 md:h-16 items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
@@ -125,8 +136,10 @@ export function Header() {
           </div>
           {/* Brand name + slogan – stacked vertically */}
           <div className="flex flex-col items-start leading-tight">
-            <span className="text-xl font-bold text-foreground">RouteMate</span>
-            <span className="text-xs italic font-medium text-muted-foreground">
+            <span className="text-lg md:text-xl font-bold text-foreground">
+              RouteMate
+            </span>
+            <span className="hidden sm:block text-xs italic font-medium text-muted-foreground">
               Rides You Can Rely On
             </span>
           </div>
@@ -264,6 +277,28 @@ export function Header() {
           )}
         </div>
 
+        {/* Mobile Icons (Notifications + Messages) */}
+        {isAuthenticated && (
+          <div className="flex items-center gap-1 md:hidden">
+            {/* Notification Bell */}
+            <div className="relative">
+              <NotificationCenter />
+            </div>
+
+            {/* Messages */}
+            <Link to="/messages">
+              <Button variant="ghost" size="icon" className="relative">
+                <MessageSquare className="h-5 w-5" />
+                {messageUnreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
+                    {messageUnreadCount}
+                  </span>
+                )}
+              </Button>
+            </Link>
+          </div>
+        )}
+
         {/* Mobile Menu Button */}
         <Button
           variant="ghost"
@@ -282,34 +317,77 @@ export function Header() {
       {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="md:hidden border-t bg-card">
-          <nav className="container py-4 flex flex-col gap-2">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                to={link.href}
-                className="px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-md"
-                onClick={() => setMobileMenuOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
-            {!isAuthenticated && (
-              <div className="flex flex-col gap-2 mt-4 pt-4 border-t">
-                <Button variant="outline" onClick={handleSignIn}>
-                  Sign In
-                </Button>
-                <Button onClick={handleSignUp}>Get Started</Button>
-              </div>
-            )}
-            {isAuthenticated && (
-              <Button
-                variant="ghost"
-                className="justify-start text-destructive mt-4"
-                onClick={handleLogout}
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                Sign Out
-              </Button>
+          <nav className="container py-2 flex flex-col">
+            {isAuthenticated ? (
+              <>
+                {[
+                  { label: "Home", href: "/home", icon: Home },
+                  {
+                    label: "Find Carpool",
+                    href: "/find-carpool",
+                    icon: Search,
+                  },
+                  { label: "Offer Ride", href: "/offer-ride", icon: Car },
+                  {
+                    label: "Upcoming Rides",
+                    href: "/upcoming-rides",
+                    icon: CalendarDays,
+                  },
+                  { label: "Messages", href: "/messages", icon: MessageSquare },
+                  { label: "History", href: "/history", icon: History },
+                  ...(isSuperAdmin
+                    ? [
+                        {
+                          label: "Platform Dashboard",
+                          href: "/super-admin",
+                          icon: Shield,
+                        },
+                      ]
+                    : []),
+                  ...(isUniversityAdmin && !isSuperAdmin
+                    ? [{ label: "Admin Panel", href: "/admin", icon: Shield }]
+                    : []),
+                ].map((link) => (
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    className="flex items-center gap-3 px-3 py-3 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors border-b border-border/40 last:border-0"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <link.icon className="h-4 w-4 text-primary" />
+                    {link.label}
+                  </Link>
+                ))}
+                <div className="pt-3 mt-2 border-t">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start text-destructive hover:bg-destructive/10"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign Out
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.href}
+                    to={link.href}
+                    className="px-3 py-3 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border-b border-border/40 last:border-0"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+                <div className="flex flex-col gap-2 mt-4 pt-4 border-t">
+                  <Button variant="outline" onClick={handleSignIn}>
+                    Sign In
+                  </Button>
+                  <Button onClick={handleSignUp}>Get Started</Button>
+                </div>
+              </>
             )}
           </nav>
         </div>

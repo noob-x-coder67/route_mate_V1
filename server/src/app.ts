@@ -1,7 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import messageRoutes from "./routes/messageRoutes";
-import helmet from "helmet";
 import routes from "./routes";
 import adminRoutes from "./routes/adminRoutes";
 
@@ -16,11 +15,10 @@ app.use(
 );
 app.options(/(.*)/, cors());
 
-app.use(express.json()); // Parses incoming JSON requests
-app.use(express.urlencoded({ extended: true })); // Parses URL-encoded data
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// --- 2. Health Check Routes ---
-// Simple check to see if server is alive
+// --- 2. Health Check ---
 app.get("/status", (req: Request, res: Response) => {
   res.json({
     message: "RouteMate Backend is Live! 🚀",
@@ -29,21 +27,19 @@ app.get("/status", (req: Request, res: Response) => {
 });
 
 // --- 3. API Routes ---
-// All authentication routes will start with /api/auth
 app.use("/api", routes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/messages", messageRoutes);
 
-export default app;
-
+// --- 4. Error Handler (MUST be after routes, before export) ---
 app.use((err: any, req: any, res: any, next: any) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || "error";
-
   res.status(err.statusCode).json({
     status: err.status,
     message: err.message,
-    // Only show stack trace in development mode
     stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
 });
+
+export default app;

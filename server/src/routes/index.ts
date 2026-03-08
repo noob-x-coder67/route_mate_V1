@@ -1,16 +1,16 @@
 import express from "express";
 import authRoutes from "./authRoutes";
 import rideRoutes from "./rideRoutes";
-import adminRoutes from "./adminRoutes";
 import messageRoutes from "./messageRoutes";
+import userRoutes from "./userRoutes";
 
 const router = express.Router();
 
 const defaultRoutes = [
   { path: "/auth", route: authRoutes },
   { path: "/rides", route: rideRoutes },
-  { path: "/admin", route: adminRoutes },
   { path: "/messages", route: messageRoutes },
+  { path: "/users", route: userRoutes },
 ];
 
 defaultRoutes.forEach((route) => {

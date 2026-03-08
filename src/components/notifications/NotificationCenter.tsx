@@ -1,15 +1,23 @@
-import { Link } from 'react-router-dom';
-import { useNotifications } from '@/contexts/NotificationContext';
-import { Button } from '@/components/ui/button';
+import { Link } from "react-router-dom";
+import { useNotifications } from "@/contexts/NotificationContext";
+import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Bell, Check, CheckCheck, Car, MessageSquare, Clock, X } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Car,
+  MessageSquare,
+  Clock,
+  X,
+} from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { cn } from "@/lib/utils";
 
 const notificationIcons = {
   ride_request: Car,
@@ -20,15 +28,21 @@ const notificationIcons = {
 };
 
 const notificationColors = {
-  ride_request: 'text-primary bg-primary/10',
-  ride_accepted: 'text-green-600 bg-green-100',
-  ride_rejected: 'text-destructive bg-destructive/10',
-  new_message: 'text-blue-600 bg-blue-100',
-  ride_reminder: 'text-amber-600 bg-amber-100',
+  ride_request: "text-primary bg-primary/10",
+  ride_accepted: "text-green-600 bg-green-100",
+  ride_rejected: "text-destructive bg-destructive/10",
+  new_message: "text-blue-600 bg-blue-100",
+  ride_reminder: "text-amber-600 bg-amber-100",
 };
 
 export function NotificationCenter() {
-  const { notifications, unreadCount, markAsRead, markAllAsRead, clearNotification } = useNotifications();
+  const {
+    notifications,
+    unreadCount,
+    markAsRead,
+    markAllAsRead,
+    clearNotification,
+  } = useNotifications();
 
   return (
     <Popover>
@@ -37,7 +51,7 @@ export function NotificationCenter() {
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground flex items-center justify-center">
-              {unreadCount > 9 ? '9+' : unreadCount}
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </Button>
@@ -74,12 +88,14 @@ export function NotificationCenter() {
                   <div
                     key={notification.id}
                     className={cn(
-                      'relative p-4 hover:bg-muted/50 transition-colors',
-                      !notification.read && 'bg-primary/5'
+                      "relative p-4 hover:bg-muted/50 transition-colors",
+                      !notification.read && "bg-primary/5",
                     )}
                   >
                     <div className="flex gap-3">
-                      <div className={cn('p-2 rounded-full shrink-0', colorClass)}>
+                      <div
+                        className={cn("p-2 rounded-full shrink-0", colorClass)}
+                      >
                         <Icon className="h-4 w-4" />
                       </div>
                       <div className="flex-1 min-w-0">
@@ -89,21 +105,28 @@ export function NotificationCenter() {
                             onClick={() => markAsRead(notification.id)}
                             className="block"
                           >
-                            <p className="font-medium text-sm">{notification.title}</p>
+                            <p className="font-medium text-sm">
+                              {notification.title}
+                            </p>
                             <p className="text-sm text-muted-foreground line-clamp-2">
                               {notification.message}
                             </p>
                           </Link>
                         ) : (
                           <>
-                            <p className="font-medium text-sm">{notification.title}</p>
+                            <p className="font-medium text-sm">
+                              {notification.title}
+                            </p>
                             <p className="text-sm text-muted-foreground line-clamp-2">
                               {notification.message}
                             </p>
                           </>
                         )}
                         <p className="text-xs text-muted-foreground mt-1">
-                          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
+                          {formatDistanceToNow(
+                            new Date(notification.createdAt),
+                            { addSuffix: true },
+                          )}
                         </p>
                       </div>
                       <Button
@@ -126,7 +149,7 @@ export function NotificationCenter() {
         </ScrollArea>
 
         <div className="p-2 border-t">
-          <Link to="/notifications">
+          <Link to="/upcoming-rides">
             <Button variant="ghost" className="w-full text-sm">
               View all notifications
             </Button>
